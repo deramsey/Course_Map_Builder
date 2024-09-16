@@ -275,7 +275,7 @@ const CourseForm = () => {
     <Container maxWidth="lg">
       <ThemeProvider theme={theme}>
             <header>
-        <Typography variant="h2" component="h1">Course Map Application</Typography>
+        <Typography variant="h2" component="h1">Course Map Builder</Typography>
       </header>
       <main>
       <Box sx={{ my: 4 }}>
