@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+
 import {
   Box,
   Typography,
@@ -20,6 +21,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { green, indigo } from '@mui/material/colors';
 
+const today = new Date();
 const theme = createTheme({
   palette: {
     primary: {
@@ -143,7 +145,7 @@ const CourseForm = () => {
   const exportToJSON = () => {
     const dataStr = JSON.stringify(course, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = 'course_data.json';
+    const exportFileDefaultName = `${course.courseNumber}_course_data${today.getDate()}${today.getMonth()}${today.getFullYear()}.json`;
 
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
@@ -169,72 +171,87 @@ const CourseForm = () => {
   };
 
   const exportToPDF = () => {
-    const doc = new jsPDF('landscape');
-    
-    // Title and course info
-    doc.setFontSize(18);
-    doc.text('Course Map', doc.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
-    doc.setFontSize(12);
-    doc.text(`Course: ${course.courseNumber} - ${course.courseName}`, 14, 25);
-    
-    // Description
-    doc.setFontSize(11);
-    doc.text('Description:', 14, 35);
-    const descriptionLines = doc.splitTextToSize(course.description, 260);
-    doc.text(descriptionLines, 14, 40);
-    
-    // SLOs
-    let SLOLetter = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M"];
-    let yPos = 40 + (descriptionLines.length * 5);
-    doc.setFontSize(11);
-
-    if (yPos > doc.internal.pageSize.getHeight() - 40) {
-      doc.addPage();
-      yPos = 20;
-    }
-
-    doc.text('Student Learning Outcomes:', 14, yPos);
-    yPos += 10;
-    doc.text('At the end of this course, the learner will be able to:', 14, yPos);
-    
-    yPos += 5;
-
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'pt',
+      format: 'a4'
+    });
+  
+    // Enable accessibility features
+    doc.setLanguage("en-US");
+  
     const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 14;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 40;
     const maxWidth = pageWidth - 2 * margin;
-
+  
+    let yPos = margin;
+  
+    // Title
+    doc.setFontSize(24);
+    doc.setTextColor(0, 102, 204);
+    doc.text('Course Map', pageWidth / 2, yPos, { align: 'center' });
+    doc.outline.add(null, 'Course Map', { pageNumber: 1 });
+    yPos += 30;
+  
+    // Course info
+    doc.setFontSize(14);
+    doc.setTextColor(0);
+    doc.text(`Course: ${course.courseNumber} - ${course.courseName}`, margin, yPos);
+    doc.outline.add(null, `Course: ${course.courseNumber} - ${course.courseName}`, { pageNumber: 1 });
+    yPos += 20;
+  
+    // Description
+    doc.setFontSize(12);
+    doc.text('Description:', margin, yPos);
+    yPos += 15;
+    const descriptionLines = doc.splitTextToSize(course.description, maxWidth);
+    doc.text(descriptionLines, margin, yPos);
+    yPos += descriptionLines.length * 14 + 10;
+  
+    // SLOs
+    doc.setFontSize(14);
+    doc.setTextColor(0, 102, 204);
+    doc.text('Student Learning Outcomes:', margin, yPos);
+    doc.outline.add(null, 'Student Learning Outcomes', { pageNumber: doc.internal.getCurrentPageInfo().pageNumber });
+    yPos += 20;
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    doc.text('At the end of this course, the learner will be able to:', margin, yPos);
+    yPos += 15;
+  
+    const SLOLetter = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M"];
     course.learningOutcomes.forEach((slo, index) => {
       const sloText = `${SLOLetter[index]}. ${slo}`;
-      const sloLines = doc.splitTextToSize(sloText, maxWidth);
+      const sloLines = doc.splitTextToSize(sloText, maxWidth - 20);
       
-      // Check if we need to start a new page
-      if (yPos + sloLines.length * 5 > doc.internal.pageSize.getHeight() - 20) {
+      if (yPos + sloLines.length * 14 > pageHeight - margin) {
         doc.addPage();
-        yPos = 20;
+        yPos = margin;
       }
       
-      doc.text(sloLines, 20, yPos);
-      yPos += sloLines.length * 5 + 2; // Add some extra space between SLOs
+      doc.text(sloLines, margin + 10, yPos);
+      yPos += sloLines.length * 14 + 5;
     });
-    
+  
     // Modules
-    yPos += 10;
+    const modulesOutline = doc.outline.add(null, 'Modules');
     course.modules.forEach((module, moduleIndex) => {
-      if (yPos > 180) {  // Check if we need a new page
+      if (yPos > pageHeight - 100) {
         doc.addPage();
-        yPos = 20;
+        yPos = margin;
       }
       
-      doc.setFontSize(12);
-      doc.text(`Module ${moduleIndex + 1}: ${module.title}`, 14, yPos);
-      yPos += 10;
+      doc.setFontSize(14);
+      doc.setTextColor(0, 102, 204);
+      doc.text(`Module ${moduleIndex + 1}: ${module.title}`, margin, yPos);
+      doc.outline.add(modulesOutline, `Module ${moduleIndex + 1}: ${module.title}`, { pageNumber: doc.internal.getCurrentPageInfo().pageNumber });
+      yPos += 20;
       
-      // Prepare SLOs for this module
       const moduleSLOs = (module.relatedSLOs || [])
         .map(sloIndex => `${SLOLetter[sloIndex]}`)
         .join(', ');
       
-      // Module content table
       doc.autoTable({
         startY: yPos,
         head: [['Objectives', 'Mapped SLOs', 'Resources', 'Activities', 'Assessments']],
@@ -243,7 +260,7 @@ const CourseForm = () => {
             (module.objectives || []).map((obj, objIndex) => 
               `${renderObjectiveNumber(moduleIndex, objIndex)} ${obj}`
             ).join('\n'),
-            moduleSLOs,  // Add the mapped SLOs column
+            moduleSLOs,
             (module.resources || []).map(r => 
               `${r.content} (Obj: ${(r.relatedObjectives || []).map(objIndex => renderObjectiveNumber(moduleIndex, parseInt(objIndex))).join(', ')})`
             ).join('\n'),
@@ -255,20 +272,42 @@ const CourseForm = () => {
             ).join('\n')
           ]
         ],
-        styles: { fontSize: 8, cellPadding: 2 },
+        styles: { 
+          fontSize: 10, 
+          cellPadding: 5,
+          overflow: 'linebreak',
+          cellWidth: 'wrap'
+        },
         columnStyles: { 
-          0: {cellWidth: 50}, 
-          1: {cellWidth: 30},  // Width for the new SLOs column
-          2: {cellWidth: 55}, 
-          3: {cellWidth: 55}, 
-          4: {cellWidth: 55}
-        }
+          0: {cellWidth: '20%'}, 
+          1: {cellWidth: '10%'},
+          2: {cellWidth: '23%'}, 
+          3: {cellWidth: '23%'}, 
+          4: {cellWidth: '24%'}
+        },
+        margin: { left: margin, right: margin },
+        tableWidth: 'auto',
+        didDrawPage: function (data) {
+          // Add page number at the bottom
+          doc.setFontSize(10);
+          doc.text('Page ' + doc.internal.getNumberOfPages(), data.settings.margin.left, doc.internal.pageSize.height - 10);
+        },
+        // Enable table header to repeat on each page
+        showHead: 'everyPage'
       });
       
-      yPos = doc.lastAutoTable.finalY + 15;
+      yPos = doc.lastAutoTable.finalY + 20;
+    });
+  
+    doc.setProperties({
+      title: `${course.courseName} Course Map`,
+      subject: `Course map for ${course.courseName}`,
+      author: "CCC Yetis",
+      keywords: "course map",
+      creator: "Web Form"
     });
     
-    doc.save('course_map.pdf');
+    doc.save(`${course.courseNumber}_course_map.pdf`);
   };
 
   return (
