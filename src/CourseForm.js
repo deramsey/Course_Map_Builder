@@ -411,7 +411,7 @@ const CourseForm = () => {
                   label="Related SLOs"
                 >
                   {course.learningOutcomes.map((slo, index) => (
-                    <MenuItem key={index} value={index}>{`SLO ${index + 1}`}</MenuItem>
+                    <MenuItem key={index} value={index}>{`SLO ${index + 1}: ${slo.length > 50 ? slo.substring(0, 50) + '...' : slo}`}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
