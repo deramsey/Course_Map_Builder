@@ -254,6 +254,9 @@ const CourseForm = () => {
       
       doc.autoTable({
         startY: yPos,
+        headStyles:{
+          fillColor: [0, 51, 102]
+        },
         head: [['Objectives', 'Mapped SLOs', 'Resources', 'Activities', 'Assessments']],
         body: [
           [
