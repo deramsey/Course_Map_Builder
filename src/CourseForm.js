@@ -189,7 +189,7 @@ const CourseForm = () => {
   
     // Title
     doc.setFontSize(24);
-    doc.setTextColor(0, 102, 204);
+    doc.setTextColor(0, 51, 102);
     doc.text('Course Map', pageWidth / 2, yPos, { align: 'center' });
     doc.outline.add(null, 'Course Map', { pageNumber: 1 });
     yPos += 30;
@@ -211,7 +211,7 @@ const CourseForm = () => {
   
     // SLOs
     doc.setFontSize(14);
-    doc.setTextColor(0, 102, 204);
+    doc.setTextColor(0, 51, 102);
     doc.text('Student Learning Outcomes:', margin, yPos);
     doc.outline.add(null, 'Student Learning Outcomes', { pageNumber: doc.internal.getCurrentPageInfo().pageNumber });
     yPos += 20;
@@ -243,7 +243,7 @@ const CourseForm = () => {
       }
       
       doc.setFontSize(14);
-      doc.setTextColor(0, 102, 204);
+      doc.setTextColor(0, 51, 102);
       doc.text(`Module ${moduleIndex + 1}: ${module.title}`, margin, yPos);
       doc.outline.add(modulesOutline, `Module ${moduleIndex + 1}: ${module.title}`, { pageNumber: doc.internal.getCurrentPageInfo().pageNumber });
       yPos += 20;
