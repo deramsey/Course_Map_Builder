@@ -36,7 +36,8 @@ const theme = createTheme({
   },
 });
 
-const generateUniqueId = () => `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+// Reusable helper for unique IDs
+const generateUniqueId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const CourseForm = () => {
   const [course, setCourse] = useState({
@@ -59,7 +60,6 @@ const CourseForm = () => {
     return displayNumber;
   };
 
-  // *** KEY CHANGE: Updated function to handle custom prefixes ***
   const renderObjectiveNumber = (module, moduleDisplayNumber, objectiveIndex) => {
     const prefix = module.isUnnumbered ? module.customPrefix || 'M' + moduleDisplayNumber : moduleDisplayNumber;
     return `${prefix}.${objectiveIndex + 1}`;
@@ -78,10 +78,12 @@ const CourseForm = () => {
     setCourse({ ...course, learningOutcomes: updatedSLOs });
   };
 
+  // *** KEY CHANGE 1: Add a unique, stable ID to each new module ***
   const addModule = () => {
     setCourse(prevState => ({
       ...prevState,
       modules: [...prevState.modules, {
+        id: generateUniqueId('module'), // Assign stable ID
         title: '',
         isUnnumbered: false,
         customPrefix: '',
@@ -160,7 +162,7 @@ const CourseForm = () => {
   };
 
   const addObjective = (moduleIndex) => {
-    const newObjective = { id: generateUniqueId(), text: '' };
+    const newObjective = { id: generateUniqueId('obj'), text: '' };
     const updatedModules = [...course.modules];
     updatedModules[moduleIndex].objectives = [
       ...(updatedModules[moduleIndex].objectives || []),
@@ -208,13 +210,17 @@ const CourseForm = () => {
         try {
           const importedCourse = JSON.parse(e.target.result);
           (importedCourse.modules || []).forEach(module => {
+            // Ensure all modules have a stable ID
+            if (!module.id) {
+              module.id = generateUniqueId('module');
+            }
             if (module.isUnnumbered === undefined) module.isUnnumbered = false;
             if (module.customPrefix === undefined) module.customPrefix = '';
             const isOldFormat = module.objectives && module.objectives.length > 0 && typeof module.objectives[0] === 'string';
             if (isOldFormat) {
               const indexToIdMap = new Map();
               module.objectives = module.objectives.map((text, index) => {
-                const newId = generateUniqueId();
+                const newId = generateUniqueId('obj');
                 indexToIdMap.set(index, newId);
                 return { id: newId, text };
               });
@@ -227,7 +233,7 @@ const CourseForm = () => {
               });
             } else {
               (module.objectives || []).forEach(obj => {
-                if (!obj.id) obj.id = generateUniqueId();
+                if (!obj.id) obj.id = generateUniqueId('obj');
               });
             }
           });
@@ -396,7 +402,8 @@ const CourseForm = () => {
                           : `Module ${moduleDisplayNumber}: ${module.title}`;
 
                         return (
-                          <Draggable key={module.title + moduleIndex} draggableId={`module-${moduleIndex}`} index={moduleIndex}>
+                          // *** KEY CHANGE 2: Use the stable module.id for the key and draggableId ***
+                          <Draggable key={module.id} draggableId={module.id} index={moduleIndex}>
                             {(provided) => (
                               <Paper ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} sx={{ p: 3, mb: 3 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
