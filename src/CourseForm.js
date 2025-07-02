@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 import {
   Box,
@@ -62,13 +63,13 @@ const CourseForm = () => {
   const addModule = () => {
     setCourse(prevState => ({
       ...prevState,
-      modules: [...prevState.modules, { 
-        title: '', 
+      modules: [...prevState.modules, {
+        title: '',
         relatedSLOs: [],
-        objectives: [], 
-        resources: [], 
-        activities: [], 
-        assessments: [] 
+        objectives: [],
+        resources: [],
+        activities: [],
+        assessments: []
       }]
     }));
   };
@@ -104,8 +105,8 @@ const CourseForm = () => {
   const updateModuleItem = (moduleIndex, field, itemIndex, content, relatedObjectives) => {
     const updatedModules = [...course.modules];
     const updatedItems = [...(updatedModules[moduleIndex][field] || [])];
-    updatedItems[itemIndex] = { 
-      content, 
+    updatedItems[itemIndex] = {
+      content,
       relatedObjectives: relatedObjectives || updatedItems[itemIndex]?.relatedObjectives || []
     };
     updatedModules[moduleIndex] = {
@@ -176,31 +177,31 @@ const CourseForm = () => {
       unit: 'pt',
       format: 'a4'
     });
-  
+
     // Enable accessibility features
     doc.setLanguage("en-US");
-  
+
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 40;
     const maxWidth = pageWidth - 2 * margin;
-  
+
     let yPos = margin;
-  
+
     // Title
     doc.setFontSize(24);
     doc.setTextColor(0, 51, 102);
     doc.text('Course Map', pageWidth / 2, yPos, { align: 'center' });
     doc.outline.add(null, 'Course Map', { pageNumber: 1 });
     yPos += 30;
-  
+
     // Course info
     doc.setFontSize(14);
     doc.setTextColor(0);
     doc.text(`Course: ${course.courseNumber} - ${course.courseName}`, margin, yPos);
     doc.outline.add(null, `Course: ${course.courseNumber} - ${course.courseName}`, { pageNumber: 1 });
     yPos += 20;
-  
+
     // Description
     doc.setFontSize(12);
     doc.text('Description:', margin, yPos);
@@ -208,7 +209,7 @@ const CourseForm = () => {
     const descriptionLines = doc.splitTextToSize(course.description, maxWidth);
     doc.text(descriptionLines, margin, yPos);
     yPos += descriptionLines.length * 14 + 10;
-  
+
     // SLOs
     doc.setFontSize(14);
     doc.setTextColor(0, 51, 102);
@@ -219,21 +220,21 @@ const CourseForm = () => {
     doc.setTextColor(0);
     doc.text('At the end of this course, the learner will be able to:', margin, yPos);
     yPos += 15;
-  
+
     const SLOLetter = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M"];
     course.learningOutcomes.forEach((slo, index) => {
       const sloText = `${SLOLetter[index]}. ${slo}`;
       const sloLines = doc.splitTextToSize(sloText, maxWidth - 20);
-      
+
       if (yPos + sloLines.length * 14 > pageHeight - margin) {
         doc.addPage();
         yPos = margin;
       }
-      
+
       doc.text(sloLines, margin + 10, yPos);
       yPos += sloLines.length * 14 + 5;
     });
-  
+
     // Modules
     const modulesOutline = doc.outline.add(null, 'Modules');
     course.modules.forEach((module, moduleIndex) => {
@@ -241,17 +242,17 @@ const CourseForm = () => {
         doc.addPage();
         yPos = margin;
       }
-      
+
       doc.setFontSize(14);
       doc.setTextColor(0, 51, 102);
       doc.text(`Module ${moduleIndex + 1}: ${module.title}`, margin, yPos);
       doc.outline.add(modulesOutline, `Module ${moduleIndex + 1}: ${module.title}`, { pageNumber: doc.internal.getCurrentPageInfo().pageNumber });
       yPos += 20;
-      
+
       const moduleSLOs = (module.relatedSLOs || [])
         .map(sloIndex => `${SLOLetter[sloIndex]}`)
         .join(', ');
-      
+
       doc.autoTable({
         startY: yPos,
         headStyles:{
@@ -260,32 +261,32 @@ const CourseForm = () => {
         head: [['Objectives', 'Mapped SLOs', 'Resources', 'Activities', 'Assessments']],
         body: [
           [
-            (module.objectives || []).map((obj, objIndex) => 
+            (module.objectives || []).map((obj, objIndex) =>
               `${renderObjectiveNumber(moduleIndex, objIndex)} ${obj}`
             ).join('\n'),
             moduleSLOs,
-            (module.resources || []).map(r => 
+            (module.resources || []).map(r =>
               `${r.content} (Obj: ${(r.relatedObjectives || []).map(objIndex => renderObjectiveNumber(moduleIndex, parseInt(objIndex))).join(', ')})`
             ).join('\n'),
-            (module.activities || []).map(a => 
+            (module.activities || []).map(a =>
               `${a.content} (Obj: ${(a.relatedObjectives || []).map(objIndex => renderObjectiveNumber(moduleIndex, parseInt(objIndex))).join(', ')})`
             ).join('\n'),
-            (module.assessments || []).map(a => 
+            (module.assessments || []).map(a =>
               `${a.content} (Obj: ${(a.relatedObjectives || []).map(objIndex => renderObjectiveNumber(moduleIndex, parseInt(objIndex))).join(', ')})`
             ).join('\n')
           ]
         ],
-        styles: { 
-          fontSize: 10, 
+        styles: {
+          fontSize: 10,
           cellPadding: 5,
           overflow: 'linebreak',
           cellWidth: 'wrap'
         },
-        columnStyles: { 
-          0: {cellWidth: '20%'}, 
+        columnStyles: {
+          0: {cellWidth: '20%'},
           1: {cellWidth: '10%'},
-          2: {cellWidth: '23%'}, 
-          3: {cellWidth: '23%'}, 
+          2: {cellWidth: '23%'},
+          3: {cellWidth: '23%'},
           4: {cellWidth: '24%'}
         },
         margin: { left: margin, right: margin },
@@ -298,10 +299,10 @@ const CourseForm = () => {
         // Enable table header to repeat on each page
         showHead: 'everyPage'
       });
-      
+
       yPos = doc.lastAutoTable.finalY + 20;
     });
-  
+
     doc.setProperties({
       title: `${course.courseName} Course Map`,
       subject: `Course map for ${course.courseName}`,
@@ -309,8 +310,23 @@ const CourseForm = () => {
       keywords: "course map",
       creator: "Web Form"
     });
-    
+
     doc.save(`${course.courseNumber}_course_map.pdf`);
+  };
+
+  const onDragEnd = (result) => {
+    if (!result.destination) {
+      return;
+    }
+
+    const items = Array.from(course.modules);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    setCourse({
+      ...course,
+      modules: items
+    });
   };
 
   return (
@@ -383,131 +399,149 @@ const CourseForm = () => {
           <Typography variant="h5" gutterBottom>
             Modules
           </Typography>
-          {course.modules.map((module, moduleIndex) => (
-            <Paper key={moduleIndex} sx={{ p: 3, mb: 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6">Module {moduleIndex + 1}</Typography>
-                <Button
-                  onClick={() => removeModule(moduleIndex)}
-                  variant="outlined"
-                  color="error"
-                  startIcon={<DeleteIcon />}
-                >
-                  Remove Module
-                </Button>
-              </Box>
-
-              <TextField
-                fullWidth
-                label="Module Title"
-                value={module.title}
-                onChange={(e) => handleModuleChange(moduleIndex, 'title', e.target.value)}
-                sx={{ mb: 2 }}
-              />
-
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel>Related SLOs</InputLabel>
-                <Select
-                  multiple
-                  value={module.relatedSLOs || []}
-                  onChange={(e) => handleModuleChange(moduleIndex, 'relatedSLOs', e.target.value)}
-                  label="Related SLOs"
-                >
-                  {course.learningOutcomes.map((slo, index) => (
-                    <MenuItem key={index} value={index}>{`SLO ${index + 1}: ${slo.length > 50 ? slo.substring(0, 50) + '...' : slo}`}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <Typography variant="subtitle1" gutterBottom>
-                Objectives
-              </Typography>
-              {(module.objectives || []).map((objective, objIndex) => (
-                <Box key={objIndex} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Typography sx={{ mr: 2, minWidth: '30px' }}>
-                    {renderObjectiveNumber(moduleIndex, objIndex)}
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    value={objective}
-                    onChange={(e) => {
-                      const updatedObjectives = [...(module.objectives || [])];
-                      updatedObjectives[objIndex] = e.target.value;
-                      handleModuleChange(moduleIndex, 'objectives', updatedObjectives);
-                    }}
-                    label={`Objective ${objIndex + 1}`}
-                    sx={{ mr: 2 }}
-                  />
-                  <IconButton onClick={() => removeModuleItem(moduleIndex, 'objectives', objIndex)} color="error">
-                    <DeleteIcon />
-                  </IconButton>
-                </Box>
-              ))}
-              <Button
-                startIcon={<AddIcon />}
-                onClick={() => handleModuleChange(moduleIndex, 'objectives', [...(module.objectives || []), ''])}
-                variant="outlined"
-                sx={{ mb: 2 }}
-              >
-                Add Objective
-              </Button>
-
-              {['resources', 'activities', 'assessments'].map(field => (
-                <Box key={field} sx={{ mb: 2 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    {field.charAt(0).toUpperCase() + field.slice(1)}
-                  </Typography>
-                  {(module[field] || []).map((item, itemIndex) => (
-                    <Box key={itemIndex} sx={{ mb: 2 }}>
-                      <TextField
-                        fullWidth
-                        value={item.content}
-                        onChange={(e) => updateModuleItem(moduleIndex, field, itemIndex, e.target.value)}
-                        label={`${field === 'activities' ? 'Activity' : field.slice(0, -1)} ${itemIndex + 1}`}
-                        sx={{ mb: 1 }}
-                      />
-                      <FormControl fullWidth sx={{ mb: 1 }}>
-                        <InputLabel>Related Objectives</InputLabel>
-                        <Select
-                          multiple
-                          value={item.relatedObjectives || []}
-                          onChange={(e) => updateModuleItem(
-                            moduleIndex,
-                            field,
-                            itemIndex,
-                            item.content,
-                            e.target.value
-                          )}
-                          label="Related Objectives"
+          <DragDropContext onDragEnd={onDragEnd}>
+            <Droppable droppableId="modules">
+              {(provided) => (
+                <div {...provided.droppableProps} ref={provided.innerRef}>
+                  {course.modules.map((module, moduleIndex) => (
+                    <Draggable key={moduleIndex} draggableId={`module-${moduleIndex}`} index={moduleIndex}>
+                      {(provided) => (
+                        <Paper
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          sx={{ p: 3, mb: 3 }}
                         >
-                          {(module.objectives || []).map((obj, objIndex) => (
-                            <MenuItem key={objIndex} value={objIndex}>
-                              {renderObjectiveNumber(moduleIndex, objIndex)} {obj}
-                            </MenuItem>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="h6">Module {moduleIndex + 1}</Typography>
+                            <Button
+                              onClick={() => removeModule(moduleIndex)}
+                              variant="outlined"
+                              color="error"
+                              startIcon={<DeleteIcon />}
+                            >
+                              Remove Module
+                            </Button>
+                          </Box>
+
+                          <TextField
+                            fullWidth
+                            label="Module Title"
+                            value={module.title}
+                            onChange={(e) => handleModuleChange(moduleIndex, 'title', e.target.value)}
+                            sx={{ mb: 2 }}
+                          />
+
+                          <FormControl fullWidth sx={{ mb: 2 }}>
+                            <InputLabel>Related SLOs</InputLabel>
+                            <Select
+                              multiple
+                              value={module.relatedSLOs || []}
+                              onChange={(e) => handleModuleChange(moduleIndex, 'relatedSLOs', e.target.value)}
+                              label="Related SLOs"
+                            >
+                              {course.learningOutcomes.map((slo, index) => (
+                                <MenuItem key={index} value={index}>{`SLO ${index + 1}: ${slo.length > 50 ? slo.substring(0, 50) + '...' : slo}`}</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+
+                          <Typography variant="subtitle1" gutterBottom>
+                            Objectives
+                          </Typography>
+                          {(module.objectives || []).map((objective, objIndex) => (
+                            <Box key={objIndex} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                              <Typography sx={{ mr: 2, minWidth: '30px' }}>
+                                {renderObjectiveNumber(moduleIndex, objIndex)}
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                value={objective}
+                                onChange={(e) => {
+                                  const updatedObjectives = [...(module.objectives || [])];
+                                  updatedObjectives[objIndex] = e.target.value;
+                                  handleModuleChange(moduleIndex, 'objectives', updatedObjectives);
+                                }}
+                                label={`Objective ${objIndex + 1}`}
+                                sx={{ mr: 2 }}
+                              />
+                              <IconButton onClick={() => removeModuleItem(moduleIndex, 'objectives', objIndex)} color="error">
+                                <DeleteIcon />
+                              </IconButton>
+                            </Box>
                           ))}
-                        </Select>
-                      </FormControl>
-                      <Button
-                        onClick={() => removeModuleItem(moduleIndex, field, itemIndex)}
-                        variant="outlined"
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                      >
-                        Remove
-                      </Button>
-                    </Box>
+                          <Button
+                            startIcon={<AddIcon />}
+                            onClick={() => handleModuleChange(moduleIndex, 'objectives', [...(module.objectives || []), ''])}
+                            variant="outlined"
+                            sx={{ mb: 2 }}
+                          >
+                            Add Objective
+                          </Button>
+
+                          {['resources', 'activities', 'assessments'].map(field => (
+                            <Box key={field} sx={{ mb: 2 }}>
+                              <Typography variant="subtitle1" gutterBottom>
+                                {field.charAt(0).toUpperCase() + field.slice(1)}
+                              </Typography>
+                              {(module[field] || []).map((item, itemIndex) => (
+                                <Box key={itemIndex} sx={{ mb: 2 }}>
+                                  <TextField
+                                    fullWidth
+                                    value={item.content}
+                                    onChange={(e) => updateModuleItem(moduleIndex, field, itemIndex, e.target.value)}
+                                    label={`${field === 'activities' ? 'Activity' : field.slice(0, -1)} ${itemIndex + 1}`}
+                                    sx={{ mb: 1 }}
+                                  />
+                                  <FormControl fullWidth sx={{ mb: 1 }}>
+                                    <InputLabel>Related Objectives</InputLabel>
+                                    <Select
+                                      multiple
+                                      value={item.relatedObjectives || []}
+                                      onChange={(e) => updateModuleItem(
+                                        moduleIndex,
+                                        field,
+                                        itemIndex,
+                                        item.content,
+                                        e.target.value
+                                      )}
+                                      label="Related Objectives"
+                                    >
+                                      {(module.objectives || []).map((obj, objIndex) => (
+                                        <MenuItem key={objIndex} value={objIndex}>
+                                          {renderObjectiveNumber(moduleIndex, objIndex)} {obj}
+                                        </MenuItem>
+                                      ))}
+                                    </Select>
+                                  </FormControl>
+                                  <Button
+                                    onClick={() => removeModuleItem(moduleIndex, field, itemIndex)}
+                                    variant="outlined"
+                                    color="error"
+                                    startIcon={<DeleteIcon />}
+                                  >
+                                    Remove
+                                  </Button>
+                                </Box>
+                              ))}
+                              <Button
+                                startIcon={<AddIcon />}
+                                onClick={() => addModuleItem(moduleIndex, field)}
+                                variant="outlined"
+                              >
+                                Add {field === 'activities' ? 'Activity' : field.slice(0, -1)}
+                              </Button>
+                            </Box>
+                          ))}
+                        </Paper>
+                      )}
+                    </Draggable>
                   ))}
-                  <Button
-                    startIcon={<AddIcon />}
-                    onClick={() => addModuleItem(moduleIndex, field)}
-                    variant="outlined"
-                  >
-                    Add {field === 'activities' ? 'Activity' : field.slice(0, -1)}
-                  </Button>
-                </Box>
-              ))}
-            </Paper>
-          ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
           <Button startIcon={<AddIcon />} onClick={addModule} variant="outlined" sx={{ mb: 2 }}>
             Add Module
           </Button>
