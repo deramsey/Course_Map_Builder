@@ -15,7 +15,9 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  IconButton
+  IconButton,
+  Checkbox, // Import Checkbox
+  FormControlLabel // Import FormControlLabel
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -34,7 +36,6 @@ const theme = createTheme({
   },
 });
 
-// Helper to generate unique IDs for objectives
 const generateUniqueId = () => `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const CourseForm = () => {
@@ -47,6 +48,18 @@ const CourseForm = () => {
   });
 
   const fileInputRef = useRef();
+
+  // --- Module Numbering Logic ---
+  // This function now calculates the correct display number for a module, skipping unnumbered ones.
+  const getModuleDisplayNumber = (allModules, currentIndex) => {
+    let displayNumber = 0;
+    for (let i = 0; i <= currentIndex; i++) {
+      if (!allModules[i].isUnnumbered) {
+        displayNumber++;
+      }
+    }
+    return displayNumber;
+  };
 
   const addSLO = () => {
     setCourse(prevState => ({
@@ -66,6 +79,8 @@ const CourseForm = () => {
       ...prevState,
       modules: [...prevState.modules, {
         title: '',
+        isUnnumbered: false, // Default for new modules
+        customPrefix: '',   // Default for new modules
         relatedSLOs: [],
         objectives: [],
         resources: [],
@@ -117,9 +132,8 @@ const CourseForm = () => {
     setCourse({ ...course, modules: updatedModules });
   };
 
-  // This function now purely generates the visual numbering based on current array positions.
-  const renderObjectiveNumber = (moduleIndex, objectiveIndex) => {
-    return `${moduleIndex + 1}.${objectiveIndex + 1}`;
+  const renderObjectiveNumber = (moduleDisplayNumber, objectiveIndex) => {
+    return `${moduleDisplayNumber}.${objectiveIndex + 1}`;
   };
 
   const removeSLO = (index) => {
@@ -145,8 +159,6 @@ const CourseForm = () => {
     setCourse({ ...course, modules: updatedModules });
   };
 
-  // --- Objective Management with Unique IDs ---
-
   const addObjective = (moduleIndex) => {
     const newObjective = { id: generateUniqueId(), text: '' };
     const updatedModules = [...course.modules];
@@ -166,32 +178,22 @@ const CourseForm = () => {
   const removeObjective = (moduleIndex, objIndex) => {
     const updatedModules = [...course.modules];
     const module = updatedModules[moduleIndex];
-    const objectiveToRemove = module.objectives[objIndex];
-    const objectiveIdToRemove = objectiveToRemove.id;
-
-    // 1. Filter out the deleted objective
+    const objectiveIdToRemove = module.objectives[objIndex].id;
     module.objectives = module.objectives.filter((_, i) => i !== objIndex);
-
-    // 2. Clean up dangling references in resources, activities, and assessments
     ['resources', 'activities', 'assessments'].forEach(field => {
       if (module[field]) {
         module[field].forEach(item => {
-          item.relatedObjectives = (item.relatedObjectives || []).filter(
-            refId => refId !== objectiveIdToRemove
-          );
+          item.relatedObjectives = (item.relatedObjectives || []).filter(refId => refId !== objectiveIdToRemove);
         });
       }
     });
-
     setCourse({ ...course, modules: updatedModules });
   };
-
 
   const exportToJSON = () => {
     const dataStr = JSON.stringify(course, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     const exportFileDefaultName = `${course.courseNumber}_course_data_${today.toISOString().slice(0,10)}.json`;
-
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -205,42 +207,36 @@ const CourseForm = () => {
       reader.onload = (e) => {
         try {
           const importedCourse = JSON.parse(e.target.result);
-
-          // *** THIS IS THE KEY FIX: MIGRATE OLD JSON FORMAT TO THE NEW ID-BASED FORMAT ***
           (importedCourse.modules || []).forEach(module => {
-            // Check if the module uses the old format (objectives are strings, not objects)
-            const isOldFormat = module.objectives && module.objectives.length > 0 && typeof module.objectives[0] === 'string';
+            // Ensure new properties exist for backward compatibility
+            if (module.isUnnumbered === undefined) {
+              module.isUnnumbered = false;
+            }
+            if (module.customPrefix === undefined) {
+              module.customPrefix = '';
+            }
 
+            const isOldFormat = module.objectives && module.objectives.length > 0 && typeof module.objectives[0] === 'string';
             if (isOldFormat) {
               const indexToIdMap = new Map();
-
-              // 1. Convert objective strings to objects with unique IDs and build the map
               module.objectives = module.objectives.map((text, index) => {
                 const newId = generateUniqueId();
-                indexToIdMap.set(index, newId); // Map old index to new ID
+                indexToIdMap.set(index, newId);
                 return { id: newId, text };
               });
-
-              // 2. Convert relatedObjective indices to the new IDs for all items
               ['resources', 'activities', 'assessments'].forEach(field => {
                 if (module[field]) {
                   module[field].forEach(item => {
-                    item.relatedObjectives = (item.relatedObjectives || [])
-                      .map(oldIndex => indexToIdMap.get(oldIndex)) // Translate index to ID
-                      .filter(id => id); // Filter out any null/undefined if index was invalid
+                    item.relatedObjectives = (item.relatedObjectives || []).map(oldIndex => indexToIdMap.get(oldIndex)).filter(id => id);
                   });
                 }
               });
             } else {
-              // For new format, just ensure all objectives have an ID for robustness
               (module.objectives || []).forEach(obj => {
-                if (!obj.id) {
-                  obj.id = generateUniqueId();
-                }
+                if (!obj.id) obj.id = generateUniqueId();
               });
             }
           });
-
           setCourse(importedCourse);
         } catch (error) {
           console.error('Error parsing JSON file:', error);
@@ -248,44 +244,33 @@ const CourseForm = () => {
         }
       };
       reader.readAsText(file);
-      // Reset file input to allow re-uploading the same file
       event.target.value = null;
     }
   };
 
   const exportToPDF = () => {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'pt',
-      format: 'a4'
-    });
-
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
     doc.setLanguage("en-US");
-
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 40;
     const maxWidth = pageWidth - 2 * margin;
-
     let yPos = margin;
 
     doc.setFontSize(24);
     doc.setTextColor(0, 51, 102);
     doc.text('Course Map', pageWidth / 2, yPos, { align: 'center' });
     yPos += 30;
-
     doc.setFontSize(14);
     doc.setTextColor(0);
     doc.text(`Course: ${course.courseNumber} - ${course.courseName}`, margin, yPos);
     yPos += 20;
-
     doc.setFontSize(12);
     doc.text('Description:', margin, yPos);
     yPos += 15;
     const descriptionLines = doc.splitTextToSize(course.description, maxWidth);
     doc.text(descriptionLines, margin, yPos);
     yPos += descriptionLines.length * 14 + 10;
-
     doc.setFontSize(14);
     doc.setTextColor(0, 51, 102);
     doc.text('Student Learning Outcomes:', margin, yPos);
@@ -294,8 +279,7 @@ const CourseForm = () => {
     doc.setTextColor(0);
     doc.text('At the end of this course, the learner will be able to:', margin, yPos);
     yPos += 15;
-
-    const SLOLetter = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M"];
+    const SLOLetter = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     course.learningOutcomes.forEach((slo, index) => {
       const sloText = `${SLOLetter[index]}. ${slo}`;
       const sloLines = doc.splitTextToSize(sloText, maxWidth - 20);
@@ -312,23 +296,26 @@ const CourseForm = () => {
         doc.addPage();
         yPos = margin;
       }
+      
+      const moduleDisplayNumber = getModuleDisplayNumber(course.modules, moduleIndex);
+      const moduleTitle = module.isUnnumbered
+        ? `${module.customPrefix || ''} ${module.title}`
+        : `Module ${moduleDisplayNumber}: ${module.title}`;
 
       doc.setFontSize(14);
       doc.setTextColor(0, 51, 102);
-      doc.text(`Module ${moduleIndex + 1}: ${module.title}`, margin, yPos);
+      doc.text(moduleTitle, margin, yPos);
       yPos += 20;
 
       const moduleSLOs = (module.relatedSLOs || []).map(sloIndex => `${SLOLetter[sloIndex]}`).join(', ');
-      
       const objectiveIdToIndexMap = new Map();
-      (module.objectives || []).forEach((obj, index) => {
-          objectiveIdToIndexMap.set(obj.id, index);
-      });
-
+      (module.objectives || []).forEach((obj, index) => objectiveIdToIndexMap.set(obj.id, index));
+      
       const getRelatedObjectiveNumber = (objId) => {
         if (objectiveIdToIndexMap.has(objId)) {
           const objIndex = objectiveIdToIndexMap.get(objId);
-          return renderObjectiveNumber(moduleIndex, objIndex);
+          // Use the correct module number for the objective's prefix
+          return renderObjectiveNumber(moduleDisplayNumber, objIndex);
         }
         return '?';
       };
@@ -339,7 +326,7 @@ const CourseForm = () => {
         head: [['Objectives', 'Mapped SLOs', 'Resources', 'Activities', 'Assessments']],
         body: [
           [
-            (module.objectives || []).map((obj, objIndex) => `${renderObjectiveNumber(moduleIndex, objIndex)} ${obj.text}`).join('\n'),
+            (module.objectives || []).map((obj, objIndex) => `${renderObjectiveNumber(moduleDisplayNumber, objIndex)} ${obj.text}`).join('\n'),
             moduleSLOs,
             (module.resources || []).map(r => `${r.content} (Obj: ${(r.relatedObjectives || []).map(getRelatedObjectiveNumber).join(', ')})`).join('\n'),
             (module.activities || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(getRelatedObjectiveNumber).join(', ')})`).join('\n'),
@@ -366,7 +353,6 @@ const CourseForm = () => {
       keywords: "course map",
       creator: "Web Form"
     });
-    
     doc.save(`${course.courseNumber}_course_map.pdf`);
   };
 
@@ -388,15 +374,9 @@ const CourseForm = () => {
           <Box sx={{ my: 4 }}>
             <Typography variant="h4" component="h1" gutterBottom>Course Map</Typography>
             <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <TextField fullWidth label="Course Number" name="courseNumber" value={course.courseNumber} onChange={handleCourseChange} />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField fullWidth label="Course Name" name="courseName" value={course.courseName} onChange={handleCourseChange} />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField fullWidth multiline rows={4} label="Course Description" name="description" value={course.description} onChange={handleCourseChange} />
-              </Grid>
+              <Grid item xs={12} sm={6}><TextField fullWidth label="Course Number" name="courseNumber" value={course.courseNumber} onChange={handleCourseChange} /></Grid>
+              <Grid item xs={12} sm={6}><TextField fullWidth label="Course Name" name="courseName" value={course.courseName} onChange={handleCourseChange} /></Grid>
+              <Grid item xs={12}><TextField fullWidth multiline rows={4} label="Course Description" name="description" value={course.description} onChange={handleCourseChange} /></Grid>
             </Grid>
 
             <Box sx={{ mt: 4 }}>
@@ -416,65 +396,87 @@ const CourseForm = () => {
                 <Droppable droppableId="modules">
                   {(provided) => (
                     <div {...provided.droppableProps} ref={provided.innerRef}>
-                      {course.modules.map((module, moduleIndex) => (
-                        <Draggable key={module.title + moduleIndex} draggableId={`module-${moduleIndex}`} index={moduleIndex}>
-                          {(provided) => (
-                            <Paper ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} sx={{ p: 3, mb: 3 }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                <Typography variant="h6">Module {moduleIndex + 1}</Typography>
-                                <Button onClick={() => removeModule(moduleIndex)} variant="outlined" color="error" startIcon={<DeleteIcon />}>Remove Module</Button>
-                              </Box>
-                              <TextField fullWidth label="Module Title" value={module.title} onChange={(e) => handleModuleChange(moduleIndex, 'title', e.target.value)} sx={{ mb: 2 }} />
-                              <FormControl fullWidth sx={{ mb: 2 }}>
-                                <InputLabel>Related SLOs</InputLabel>
-                                <Select multiple value={module.relatedSLOs || []} onChange={(e) => handleModuleChange(moduleIndex, 'relatedSLOs', e.target.value)} label="Related SLOs">
-                                  {course.learningOutcomes.map((slo, index) => (
-                                    <MenuItem key={index} value={index}>{`SLO ${index + 1}: ${slo.length > 50 ? slo.substring(0, 50) + '...' : slo}`}</MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
+                      {course.modules.map((module, moduleIndex) => {
+                        const moduleDisplayNumber = getModuleDisplayNumber(course.modules, moduleIndex);
+                        const moduleTitle = module.isUnnumbered
+                          ? `${module.customPrefix || ''} ${module.title}`.trim()
+                          : `Module ${moduleDisplayNumber}: ${module.title}`;
 
-                              <Typography variant="subtitle1" gutterBottom>Objectives</Typography>
-                              {(module.objectives || []).map((objective, objIndex) => (
-                                <Box key={objective.id} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                  <Typography sx={{ mr: 2, minWidth: '30px' }}>{renderObjectiveNumber(moduleIndex, objIndex)}</Typography>
-                                  <TextField fullWidth value={objective.text} onChange={(e) => updateObjective(moduleIndex, objIndex, e.target.value)} label={`Objective ${objIndex + 1}`} sx={{ mr: 2 }} />
-                                  <IconButton onClick={() => removeObjective(moduleIndex, objIndex)} color="error"><DeleteIcon /></IconButton>
+                        return (
+                          <Draggable key={module.title + moduleIndex} draggableId={`module-${moduleIndex}`} index={moduleIndex}>
+                            {(provided) => (
+                              <Paper ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} sx={{ p: 3, mb: 3 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                  <Typography variant="h6">{moduleTitle}</Typography>
+                                  <Button onClick={() => removeModule(moduleIndex)} variant="outlined" color="error" startIcon={<DeleteIcon />}>Remove Module</Button>
                                 </Box>
-                              ))}
-                              <Button startIcon={<AddIcon />} onClick={() => addObjective(moduleIndex)} variant="outlined" sx={{ mb: 2 }}>Add Objective</Button>
+                                
+                                <Grid container spacing={2} sx={{ mb: 2 }}>
+                                  <Grid item xs={12} sm={8}>
+                                    <TextField fullWidth label="Module Title" value={module.title} onChange={(e) => handleModuleChange(moduleIndex, 'title', e.target.value)} />
+                                  </Grid>
+                                  <Grid item xs={12} sm={4}>
+                                    <FormControlLabel
+                                      control={<Checkbox checked={module.isUnnumbered || false} onChange={(e) => handleModuleChange(moduleIndex, 'isUnnumbered', e.target.checked)} />}
+                                      label="Exclude from numbering"
+                                    />
+                                  </Grid>
+                                  {module.isUnnumbered && (
+                                    <Grid item xs={12}>
+                                      <TextField
+                                        fullWidth
+                                        label="Custom Prefix (e.g., 'Optional', 'Final Exam')"
+                                        value={module.customPrefix || ''}
+                                        onChange={(e) => handleModuleChange(moduleIndex, 'customPrefix', e.target.value)}
+                                      />
+                                    </Grid>
+                                  )}
+                                </Grid>
 
-                              {['resources', 'activities', 'assessments'].map(field => (
-                                <Box key={field} sx={{ mb: 2 }}>
-                                  <Typography variant="subtitle1" gutterBottom>{field.charAt(0).toUpperCase() + field.slice(1)}</Typography>
-                                  {(module[field] || []).map((item, itemIndex) => (
-                                    <Box key={itemIndex} sx={{ mb: 2 }}>
-                                      <TextField fullWidth value={item.content} onChange={(e) => updateModuleItem(moduleIndex, field, itemIndex, e.target.value, item.relatedObjectives)} label={`${field.slice(0, -1)} ${itemIndex + 1}`} sx={{ mb: 1 }} />
-                                      <FormControl fullWidth sx={{ mb: 1 }}>
-                                        <InputLabel>Related Objectives</InputLabel>
-                                        <Select
-                                          multiple
-                                          value={item.relatedObjectives || []}
-                                          onChange={(e) => updateModuleItem(moduleIndex, field, itemIndex, item.content, e.target.value)}
-                                          label="Related Objectives"
-                                        >
-                                          {(module.objectives || []).map((obj, objIndex) => (
-                                            <MenuItem key={obj.id} value={obj.id}>
-                                              {`${renderObjectiveNumber(moduleIndex, objIndex)}: ${obj.text}`}
-                                            </MenuItem>
-                                          ))}
-                                        </Select>
-                                      </FormControl>
-                                      <Button onClick={() => removeModuleItem(moduleIndex, field, itemIndex)} variant="outlined" color="error" startIcon={<DeleteIcon />}>Remove</Button>
-                                    </Box>
-                                  ))}
-                                  <Button startIcon={<AddIcon />} onClick={() => addModuleItem(moduleIndex, field)} variant="outlined">Add {field.slice(0, -1)}</Button>
-                                </Box>
-                              ))}
-                            </Paper>
-                          )}
-                        </Draggable>
-                      ))}
+                                <FormControl fullWidth sx={{ mb: 2 }}>
+                                  <InputLabel>Related SLOs</InputLabel>
+                                  <Select multiple value={module.relatedSLOs || []} onChange={(e) => handleModuleChange(moduleIndex, 'relatedSLOs', e.target.value)} label="Related SLOs">
+                                    {course.learningOutcomes.map((slo, index) => (
+                                      <MenuItem key={index} value={index}>{`SLO ${index + 1}: ${slo.length > 50 ? slo.substring(0, 50) + '...' : slo}`}</MenuItem>
+                                    ))}
+                                  </Select>
+                                </FormControl>
+
+                                <Typography variant="subtitle1" gutterBottom>Objectives</Typography>
+                                {(module.objectives || []).map((objective, objIndex) => (
+                                  <Box key={objective.id} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                    <Typography sx={{ mr: 2, minWidth: '40px' }}>{renderObjectiveNumber(moduleDisplayNumber, objIndex)}</Typography>
+                                    <TextField fullWidth value={objective.text} onChange={(e) => updateObjective(moduleIndex, objIndex, e.target.value)} label={`Objective ${objIndex + 1}`} sx={{ mr: 2 }} />
+                                    <IconButton onClick={() => removeObjective(moduleIndex, objIndex)} color="error"><DeleteIcon /></IconButton>
+                                  </Box>
+                                ))}
+                                <Button startIcon={<AddIcon />} onClick={() => addObjective(moduleIndex)} variant="outlined" sx={{ mb: 2 }}>Add Objective</Button>
+
+                                {['resources', 'activities', 'assessments'].map(field => (
+                                  <Box key={field} sx={{ mb: 2 }}>
+                                    <Typography variant="subtitle1" gutterBottom>{field.charAt(0).toUpperCase() + field.slice(1)}</Typography>
+                                    {(module[field] || []).map((item, itemIndex) => (
+                                      <Box key={itemIndex} sx={{ mb: 2 }}>
+                                        <TextField fullWidth value={item.content} onChange={(e) => updateModuleItem(moduleIndex, field, itemIndex, e.target.value, item.relatedObjectives)} label={`${field.slice(0, -1)} ${itemIndex + 1}`} sx={{ mb: 1 }} />
+                                        <FormControl fullWidth sx={{ mb: 1 }}>
+                                          <InputLabel>Related Objectives</InputLabel>
+                                          <Select multiple value={item.relatedObjectives || []} onChange={(e) => updateModuleItem(moduleIndex, field, itemIndex, item.content, e.target.value)} label="Related Objectives">
+                                            {(module.objectives || []).map((obj, objIndex) => (
+                                              <MenuItem key={obj.id} value={obj.id}>{`${renderObjectiveNumber(moduleDisplayNumber, objIndex)}: ${obj.text}`}</MenuItem>
+                                            ))}
+                                          </Select>
+                                        </FormControl>
+                                        <Button onClick={() => removeModuleItem(moduleIndex, field, itemIndex)} variant="outlined" color="error" startIcon={<DeleteIcon />}>Remove</Button>
+                                      </Box>
+                                    ))}
+                                    <Button startIcon={<AddIcon />} onClick={() => addModuleItem(moduleIndex, field)} variant="outlined">Add {field.slice(0, -1)}</Button>
+                                  </Box>
+                                ))}
+                              </Paper>
+                            )}
+                          </Draggable>
+                        );
+                      })}
                       {provided.placeholder}
                     </div>
                   )}
