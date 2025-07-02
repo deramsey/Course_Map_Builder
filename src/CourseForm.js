@@ -205,21 +205,42 @@ const CourseForm = () => {
       reader.onload = (e) => {
         try {
           const importedCourse = JSON.parse(e.target.result);
-          // Migration logic: Ensure all objectives have unique IDs, even from older JSON files.
+
+          // *** THIS IS THE KEY FIX: MIGRATE OLD JSON FORMAT TO THE NEW ID-BASED FORMAT ***
           (importedCourse.modules || []).forEach(module => {
-            if (module.objectives && module.objectives.length > 0) {
-              // If objectives are just strings, convert them to the new object format.
-              if (typeof module.objectives[0] === 'string') {
-                module.objectives = module.objectives.map(text => ({ id: generateUniqueId(), text }));
-              } else { // Otherwise, just ensure every objective has an ID.
-                module.objectives.forEach(obj => {
-                  if (!obj.id) {
-                    obj.id = generateUniqueId();
-                  }
-                });
-              }
+            // Check if the module uses the old format (objectives are strings, not objects)
+            const isOldFormat = module.objectives && module.objectives.length > 0 && typeof module.objectives[0] === 'string';
+
+            if (isOldFormat) {
+              const indexToIdMap = new Map();
+
+              // 1. Convert objective strings to objects with unique IDs and build the map
+              module.objectives = module.objectives.map((text, index) => {
+                const newId = generateUniqueId();
+                indexToIdMap.set(index, newId); // Map old index to new ID
+                return { id: newId, text };
+              });
+
+              // 2. Convert relatedObjective indices to the new IDs for all items
+              ['resources', 'activities', 'assessments'].forEach(field => {
+                if (module[field]) {
+                  module[field].forEach(item => {
+                    item.relatedObjectives = (item.relatedObjectives || [])
+                      .map(oldIndex => indexToIdMap.get(oldIndex)) // Translate index to ID
+                      .filter(id => id); // Filter out any null/undefined if index was invalid
+                  });
+                }
+              });
+            } else {
+              // For new format, just ensure all objectives have an ID for robustness
+              (module.objectives || []).forEach(obj => {
+                if (!obj.id) {
+                  obj.id = generateUniqueId();
+                }
+              });
             }
           });
+
           setCourse(importedCourse);
         } catch (error) {
           console.error('Error parsing JSON file:', error);
@@ -227,6 +248,8 @@ const CourseForm = () => {
         }
       };
       reader.readAsText(file);
+      // Reset file input to allow re-uploading the same file
+      event.target.value = null;
     }
   };
 
@@ -297,19 +320,17 @@ const CourseForm = () => {
 
       const moduleSLOs = (module.relatedSLOs || []).map(sloIndex => `${SLOLetter[sloIndex]}`).join(', ');
       
-      // *** KEY CHANGE: Create a dynamic lookup map from objective ID to its CURRENT index ***
       const objectiveIdToIndexMap = new Map();
       (module.objectives || []).forEach((obj, index) => {
           objectiveIdToIndexMap.set(obj.id, index);
       });
 
-      // Helper function to get the display number for a related objective
       const getRelatedObjectiveNumber = (objId) => {
         if (objectiveIdToIndexMap.has(objId)) {
           const objIndex = objectiveIdToIndexMap.get(objId);
           return renderObjectiveNumber(moduleIndex, objIndex);
         }
-        return '?'; // Return a placeholder if the objective was somehow deleted but reference remains
+        return '?';
       };
 
       doc.autoTable({
@@ -439,7 +460,6 @@ const CourseForm = () => {
                                         >
                                           {(module.objectives || []).map((obj, objIndex) => (
                                             <MenuItem key={obj.id} value={obj.id}>
-                                              {/* Display the dynamic number and text in the dropdown */}
                                               {`${renderObjectiveNumber(moduleIndex, objIndex)}: ${obj.text}`}
                                             </MenuItem>
                                           ))}
