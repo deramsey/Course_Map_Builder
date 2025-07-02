@@ -117,6 +117,7 @@ const CourseForm = () => {
     setCourse({ ...course, modules: updatedModules });
   };
 
+  // This function now purely generates the visual numbering based on current array positions.
   const renderObjectiveNumber = (moduleIndex, objectiveIndex) => {
     return `${moduleIndex + 1}.${objectiveIndex + 1}`;
   };
@@ -189,7 +190,7 @@ const CourseForm = () => {
   const exportToJSON = () => {
     const dataStr = JSON.stringify(course, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `${course.courseNumber}_course_data${today.getDate()}${today.getMonth()}${today.getFullYear()}.json`;
+    const exportFileDefaultName = `${course.courseNumber}_course_data_${today.toISOString().slice(0,10)}.json`;
 
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
@@ -204,10 +205,19 @@ const CourseForm = () => {
       reader.onload = (e) => {
         try {
           const importedCourse = JSON.parse(e.target.result);
-          // Simple validation to ensure objectives have IDs. Can be expanded.
-          importedCourse.modules.forEach(module => {
-            if (module.objectives && module.objectives.every(obj => typeof obj === 'string')) {
-              module.objectives = module.objectives.map(text => ({ id: generateUniqueId(), text }));
+          // Migration logic: Ensure all objectives have unique IDs, even from older JSON files.
+          (importedCourse.modules || []).forEach(module => {
+            if (module.objectives && module.objectives.length > 0) {
+              // If objectives are just strings, convert them to the new object format.
+              if (typeof module.objectives[0] === 'string') {
+                module.objectives = module.objectives.map(text => ({ id: generateUniqueId(), text }));
+              } else { // Otherwise, just ensure every objective has an ID.
+                module.objectives.forEach(obj => {
+                  if (!obj.id) {
+                    obj.id = generateUniqueId();
+                  }
+                });
+              }
             }
           });
           setCourse(importedCourse);
@@ -287,11 +297,20 @@ const CourseForm = () => {
 
       const moduleSLOs = (module.relatedSLOs || []).map(sloIndex => `${SLOLetter[sloIndex]}`).join(', ');
       
-      // Create a map for quick lookup of objective index by its ID
+      // *** KEY CHANGE: Create a dynamic lookup map from objective ID to its CURRENT index ***
       const objectiveIdToIndexMap = new Map();
       (module.objectives || []).forEach((obj, index) => {
           objectiveIdToIndexMap.set(obj.id, index);
       });
+
+      // Helper function to get the display number for a related objective
+      const getRelatedObjectiveNumber = (objId) => {
+        if (objectiveIdToIndexMap.has(objId)) {
+          const objIndex = objectiveIdToIndexMap.get(objId);
+          return renderObjectiveNumber(moduleIndex, objIndex);
+        }
+        return '?'; // Return a placeholder if the objective was somehow deleted but reference remains
+      };
 
       doc.autoTable({
         startY: yPos,
@@ -301,9 +320,9 @@ const CourseForm = () => {
           [
             (module.objectives || []).map((obj, objIndex) => `${renderObjectiveNumber(moduleIndex, objIndex)} ${obj.text}`).join('\n'),
             moduleSLOs,
-            (module.resources || []).map(r => `${r.content} (Obj: ${(r.relatedObjectives || []).map(objId => renderObjectiveNumber(moduleIndex, objectiveIdToIndexMap.get(objId))).join(', ')})`).join('\n'),
-            (module.activities || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(objId => renderObjectiveNumber(moduleIndex, objectiveIdToIndexMap.get(objId))).join(', ')})`).join('\n'),
-            (module.assessments || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(objId => renderObjectiveNumber(moduleIndex, objectiveIdToIndexMap.get(objId))).join(', ')})`).join('\n')
+            (module.resources || []).map(r => `${r.content} (Obj: ${(r.relatedObjectives || []).map(getRelatedObjectiveNumber).join(', ')})`).join('\n'),
+            (module.activities || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(getRelatedObjectiveNumber).join(', ')})`).join('\n'),
+            (module.assessments || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(getRelatedObjectiveNumber).join(', ')})`).join('\n')
           ]
         ],
         styles: { fontSize: 10, cellPadding: 5, overflow: 'linebreak', cellWidth: 'wrap' },
@@ -418,9 +437,10 @@ const CourseForm = () => {
                                           onChange={(e) => updateModuleItem(moduleIndex, field, itemIndex, item.content, e.target.value)}
                                           label="Related Objectives"
                                         >
-                                          {(module.objectives || []).map((obj) => (
+                                          {(module.objectives || []).map((obj, objIndex) => (
                                             <MenuItem key={obj.id} value={obj.id}>
-                                              {obj.text}
+                                              {/* Display the dynamic number and text in the dropdown */}
+                                              {`${renderObjectiveNumber(moduleIndex, objIndex)}: ${obj.text}`}
                                             </MenuItem>
                                           ))}
                                         </Select>
