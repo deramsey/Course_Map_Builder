@@ -16,8 +16,8 @@ import {
   FormControl,
   InputLabel,
   IconButton,
-  Checkbox, // Import Checkbox
-  FormControlLabel // Import FormControlLabel
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -49,8 +49,6 @@ const CourseForm = () => {
 
   const fileInputRef = useRef();
 
-  // --- Module Numbering Logic ---
-  // This function now calculates the correct display number for a module, skipping unnumbered ones.
   const getModuleDisplayNumber = (allModules, currentIndex) => {
     let displayNumber = 0;
     for (let i = 0; i <= currentIndex; i++) {
@@ -59,6 +57,12 @@ const CourseForm = () => {
       }
     }
     return displayNumber;
+  };
+
+  // *** KEY CHANGE: Updated function to handle custom prefixes ***
+  const renderObjectiveNumber = (module, moduleDisplayNumber, objectiveIndex) => {
+    const prefix = module.isUnnumbered ? module.customPrefix || 'M' + moduleDisplayNumber : moduleDisplayNumber;
+    return `${prefix}.${objectiveIndex + 1}`;
   };
 
   const addSLO = () => {
@@ -79,8 +83,8 @@ const CourseForm = () => {
       ...prevState,
       modules: [...prevState.modules, {
         title: '',
-        isUnnumbered: false, // Default for new modules
-        customPrefix: '',   // Default for new modules
+        isUnnumbered: false,
+        customPrefix: '',
         relatedSLOs: [],
         objectives: [],
         resources: [],
@@ -130,10 +134,6 @@ const CourseForm = () => {
       [field]: updatedItems
     };
     setCourse({ ...course, modules: updatedModules });
-  };
-
-  const renderObjectiveNumber = (moduleDisplayNumber, objectiveIndex) => {
-    return `${moduleDisplayNumber}.${objectiveIndex + 1}`;
   };
 
   const removeSLO = (index) => {
@@ -208,14 +208,8 @@ const CourseForm = () => {
         try {
           const importedCourse = JSON.parse(e.target.result);
           (importedCourse.modules || []).forEach(module => {
-            // Ensure new properties exist for backward compatibility
-            if (module.isUnnumbered === undefined) {
-              module.isUnnumbered = false;
-            }
-            if (module.customPrefix === undefined) {
-              module.customPrefix = '';
-            }
-
+            if (module.isUnnumbered === undefined) module.isUnnumbered = false;
+            if (module.customPrefix === undefined) module.customPrefix = '';
             const isOldFormat = module.objectives && module.objectives.length > 0 && typeof module.objectives[0] === 'string';
             if (isOldFormat) {
               const indexToIdMap = new Map();
@@ -299,7 +293,7 @@ const CourseForm = () => {
       
       const moduleDisplayNumber = getModuleDisplayNumber(course.modules, moduleIndex);
       const moduleTitle = module.isUnnumbered
-        ? `${module.customPrefix || ''} ${module.title}`
+        ? `${module.customPrefix || ''} ${module.title}`.trim()
         : `Module ${moduleDisplayNumber}: ${module.title}`;
 
       doc.setFontSize(14);
@@ -311,11 +305,10 @@ const CourseForm = () => {
       const objectiveIdToIndexMap = new Map();
       (module.objectives || []).forEach((obj, index) => objectiveIdToIndexMap.set(obj.id, index));
       
-      const getRelatedObjectiveNumber = (objId) => {
+      const getRelatedObjectiveNumberString = (objId) => {
         if (objectiveIdToIndexMap.has(objId)) {
           const objIndex = objectiveIdToIndexMap.get(objId);
-          // Use the correct module number for the objective's prefix
-          return renderObjectiveNumber(moduleDisplayNumber, objIndex);
+          return renderObjectiveNumber(module, moduleDisplayNumber, objIndex);
         }
         return '?';
       };
@@ -326,11 +319,11 @@ const CourseForm = () => {
         head: [['Objectives', 'Mapped SLOs', 'Resources', 'Activities', 'Assessments']],
         body: [
           [
-            (module.objectives || []).map((obj, objIndex) => `${renderObjectiveNumber(moduleDisplayNumber, objIndex)} ${obj.text}`).join('\n'),
+            (module.objectives || []).map((obj, objIndex) => `${renderObjectiveNumber(module, moduleDisplayNumber, objIndex)} ${obj.text}`).join('\n'),
             moduleSLOs,
-            (module.resources || []).map(r => `${r.content} (Obj: ${(r.relatedObjectives || []).map(getRelatedObjectiveNumber).join(', ')})`).join('\n'),
-            (module.activities || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(getRelatedObjectiveNumber).join(', ')})`).join('\n'),
-            (module.assessments || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(getRelatedObjectiveNumber).join(', ')})`).join('\n')
+            (module.resources || []).map(r => `${r.content} (Obj: ${(r.relatedObjectives || []).map(getRelatedObjectiveNumberString).join(', ')})`).join('\n'),
+            (module.activities || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(getRelatedObjectiveNumberString).join(', ')})`).join('\n'),
+            (module.assessments || []).map(a => `${a.content} (Obj: ${(a.relatedObjectives || []).map(getRelatedObjectiveNumberString).join(', ')})`).join('\n')
           ]
         ],
         styles: { fontSize: 10, cellPadding: 5, overflow: 'linebreak', cellWidth: 'wrap' },
@@ -425,7 +418,7 @@ const CourseForm = () => {
                                     <Grid item xs={12}>
                                       <TextField
                                         fullWidth
-                                        label="Custom Prefix (e.g., 'Optional', 'Final Exam')"
+                                        label="Custom Prefix (e.g., 'Optional', 'Final')"
                                         value={module.customPrefix || ''}
                                         onChange={(e) => handleModuleChange(moduleIndex, 'customPrefix', e.target.value)}
                                       />
@@ -445,7 +438,7 @@ const CourseForm = () => {
                                 <Typography variant="subtitle1" gutterBottom>Objectives</Typography>
                                 {(module.objectives || []).map((objective, objIndex) => (
                                   <Box key={objective.id} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                    <Typography sx={{ mr: 2, minWidth: '40px' }}>{renderObjectiveNumber(moduleDisplayNumber, objIndex)}</Typography>
+                                    <Typography sx={{ mr: 2, minWidth: '60px' }}>{renderObjectiveNumber(module, moduleDisplayNumber, objIndex)}</Typography>
                                     <TextField fullWidth value={objective.text} onChange={(e) => updateObjective(moduleIndex, objIndex, e.target.value)} label={`Objective ${objIndex + 1}`} sx={{ mr: 2 }} />
                                     <IconButton onClick={() => removeObjective(moduleIndex, objIndex)} color="error"><DeleteIcon /></IconButton>
                                   </Box>
@@ -462,7 +455,7 @@ const CourseForm = () => {
                                           <InputLabel>Related Objectives</InputLabel>
                                           <Select multiple value={item.relatedObjectives || []} onChange={(e) => updateModuleItem(moduleIndex, field, itemIndex, item.content, e.target.value)} label="Related Objectives">
                                             {(module.objectives || []).map((obj, objIndex) => (
-                                              <MenuItem key={obj.id} value={obj.id}>{`${renderObjectiveNumber(moduleDisplayNumber, objIndex)}: ${obj.text}`}</MenuItem>
+                                              <MenuItem key={obj.id} value={obj.id}>{`${renderObjectiveNumber(module, moduleDisplayNumber, objIndex)}: ${obj.text}`}</MenuItem>
                                             ))}
                                           </Select>
                                         </FormControl>
